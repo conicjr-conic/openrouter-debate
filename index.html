@@ -684,15 +684,15 @@ ${h2.filter(m => m.role === 'assistant').map((m, i) => `Round ${i+1}: ${m.conten
     container.style.width = '720px';
     container.style.background = '#ffffff';
     container.style.color = '#000000';
-    container.style.padding = '24px';
     container.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
     const dateStr = new Date(date).toLocaleString('ko-KR');
-    container.innerHTML = `
-      <div style="margin-bottom:16px;">
-        <h1 style="font-size:18px;margin:0 0 4px;color:#000;">${escapeHtml(topic)}</h1>
-        <div style="font-size:12px;color:#555;">${escapeHtml(ai1Label)} vs ${escapeHtml(ai2Label)} · ${rounds}R · ${escapeHtml(dateStr)}</div>
-      </div>`;
+    const header = document.createElement('div');
+    header.style.padding = '0 0 6px';
+    header.innerHTML = `
+      <h1 style="font-size:18px;margin:0 0 4px;color:#000;">${escapeHtml(topic)}</h1>
+      <div style="font-size:12px;color:#555;">${escapeHtml(ai1Label)} vs ${escapeHtml(ai2Label)} · ${rounds}R · ${escapeHtml(dateStr)}</div>`;
+    container.appendChild(header);
 
     document.getElementById('debateArea').querySelectorAll('.msg').forEach(msg => {
       const clone = msg.cloneNode(true);
@@ -700,9 +700,11 @@ ${h2.filter(m => m.role === 'assistant').map((m, i) => `Round ${i+1}: ${m.conten
       clone.style.background = isVerdict ? '#fffaf0' : '#ffffff';
       clone.style.border = `1px solid ${isVerdict ? '#d4a017' : '#ccc'}`;
       clone.style.color = '#000000';
-      clone.style.marginBottom = '12px';
-      clone.style.borderRadius = '12px';
-      clone.style.padding = '16px 18px';
+      clone.style.margin = '0';
+      clone.style.borderRadius = '10px';
+      clone.style.padding = '14px 16px';
+      clone.style.animation = 'none';
+      clone.style.opacity = '1';
       clone.querySelectorAll('.msg-body, .round-label, .search-tag').forEach(el => { el.style.color = '#000'; });
       clone.querySelectorAll('.badge-ai1, .badge-ai2, .badge-verdict').forEach(el => {
         el.style.background = '#eee';
@@ -715,25 +717,65 @@ ${h2.filter(m => m.role === 'assistant').map((m, i) => `Round ${i+1}: ${m.conten
     document.body.appendChild(container);
 
     try {
-      const canvas = await html2canvas(container, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
       const { jsPDF } = window.jspdf;
       const pdf = new jsPDF('p', 'pt', 'a4');
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = pageWidth;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      const imgData = canvas.toDataURL('image/png');
+      const margin = 32;
+      const gap = 10;
+      const contentWidth = pageWidth - margin * 2;
+      const maxBlockHeight = pageHeight - margin * 2;
 
-      let heightLeft = imgHeight;
-      let position = 0;
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
+      let y = margin;
+      let pendingNewPage = false;
 
-      while (heightLeft > 0) {
-        position -= pageHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
+      for (const block of [...container.children]) {
+        const canvas = await html2canvas(block, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+        const ratio = contentWidth / canvas.width;
+        const imgHeight = canvas.height * ratio;
+
+        if (pendingNewPage) {
+          pdf.addPage();
+          y = margin;
+          pendingNewPage = false;
+        }
+
+        if (imgHeight <= maxBlockHeight) {
+          // Whole block fits on one page — break to a new page if it doesn't fit here
+          if (y > margin && y + imgHeight > pageHeight - margin) {
+            pdf.addPage();
+            y = margin;
+          }
+          pdf.addImage(canvas.toDataURL('image/png'), 'PNG', margin, y, contentWidth, imgHeight);
+          y += imgHeight + gap;
+        } else {
+          // Block is taller than a page — slice it across full pages
+          if (y > margin) {
+            pdf.addPage();
+            y = margin;
+          }
+          const sliceHeightPx = Math.floor(maxBlockHeight / ratio);
+          let renderedPx = 0;
+          while (renderedPx < canvas.height) {
+            const h = Math.min(sliceHeightPx, canvas.height - renderedPx);
+            const tmp = document.createElement('canvas');
+            tmp.width = canvas.width;
+            tmp.height = h;
+            tmp.getContext('2d').drawImage(canvas, 0, renderedPx, canvas.width, h, 0, 0, canvas.width, h);
+            pdf.addImage(tmp.toDataURL('image/png'), 'PNG', margin, margin, contentWidth, h * ratio);
+            renderedPx += h;
+            if (renderedPx < canvas.height) pdf.addPage();
+          }
+          pendingNewPage = true;
+        }
+      }
+
+      const pageCount = pdf.internal.getNumberOfPages();
+      for (let p = 1; p <= pageCount; p++) {
+        pdf.setPage(p);
+        pdf.setFontSize(9);
+        pdf.setTextColor(150);
+        pdf.text(`${p} / ${pageCount}`, pageWidth - margin, pageHeight - 14, { align: 'right' });
       }
 
       pdf.save(safeFileName(topic, date, 'pdf'));
