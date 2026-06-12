@@ -145,9 +145,33 @@
 
     footer { text-align: center; font-size: 12px; color: var(--text3); padding: 1.5rem 0 0.5rem; }
 
+    /* Export */
+    .export-actions { display: flex; gap: 8px; justify-content: center; margin-top: 1.25rem; }
+    .export-btn { font-size: 13px; padding: 8px 16px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; transition: all 0.12s; }
+    .export-btn:hover { border-color: var(--border2); background: var(--surface2); }
+
+    /* Print-only header */
+    .print-only { display: none; }
+
     /* Overlay for mobile */
     .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 40; }
     .overlay.active { display: block; }
+
+    @media print {
+      body { background: #fff; color: #000; }
+      header, .sidebar, .overlay, .model-section, .topic-section, .controls-row, .status, .export-actions, footer, .sidebar-toggle { display: none !important; }
+      .main-wrapper { overflow: visible; }
+      .main-content { max-width: 100%; padding: 0; margin: 0; }
+      .print-only { display: block; margin-bottom: 1.25rem; }
+      .print-only h1 { font-size: 18px; margin-bottom: 4px; color: #000; }
+      .print-only .print-meta { font-size: 12px; color: #555; }
+      .msg { background: #fff; border: 1px solid #ccc; box-shadow: none; break-inside: avoid; }
+      .msg.verdict { background: #fffaf0; border-color: #d4a017; }
+      .msg-body { color: #000; }
+      .badge-ai1, .badge-ai2 { background: #eee; color: #000; border: 1px solid #999; }
+      .badge-verdict { background: #fffaf0; color: #000; border: 1px solid #d4a017; }
+      .round-label, .search-tag { color: #555; }
+    }
 
     @media (max-width: 700px) {
       .sidebar {
@@ -199,6 +223,11 @@
   <div class="main-wrapper">
     <div class="main-content">
 
+      <div class="print-only" id="printHeader">
+        <h1 id="printTitle"></h1>
+        <div class="print-meta" id="printMeta"></div>
+      </div>
+
       <div class="model-section">
         <div class="section-label">참가 모델</div>
         <div class="model-row">
@@ -240,6 +269,10 @@
 
       <div class="status" id="status"></div>
       <div class="debate-area" id="debateArea"></div>
+      <div class="export-actions" id="exportActions" style="display:none;">
+        <button class="export-btn" onclick="exportText()">📄 텍스트 저장 (.txt)</button>
+        <button class="export-btn" onclick="exportPDF()">🖨️ PDF 저장</button>
+      </div>
       <footer>OpenRouter · 웹 검색 기반 실시간 데이터</footer>
     </div>
   </div>
@@ -250,36 +283,60 @@
   const MODEL_KEY = 'openrouter_debate_models_v1';
   let currentDebateId = null;
 
-  const MODELS = [
-    { id: 'meta-llama/llama-3.3-70b-instruct:free', label: 'Llama 3.3 70B', tag: '무료⚡' },
-    { id: 'openai/gpt-oss-120b:free', label: 'GPT-OSS 120B', tag: '무료⚡' },
-    { id: 'google/gemma-4-31b-it:free', label: 'Gemma 4 31B', tag: '무료⚡' },
-    { id: 'qwen/qwen3-next-80b-a3b-instruct:free', label: 'Qwen3 Next 80B', tag: '무료⚡' },
-    { id: 'anthropic/claude-opus-4', label: 'Claude Opus 4', tag: '유료' },
-    { id: 'openai/gpt-4o', label: 'GPT-4o', tag: '유료' }
+  // Fallback list used if /api/models is unreachable
+  const FALLBACK_MODELS = [
+    { id: 'meta-llama/llama-3.3-70b-instruct:free', name: 'Meta: Llama 3.3 70B Instruct' },
+    { id: 'openai/gpt-oss-120b:free', name: 'OpenAI: gpt-oss-120b' },
+    { id: 'google/gemma-4-31b-it:free', name: 'Google: Gemma 4 31B' },
+    { id: 'qwen/qwen3-next-80b-a3b-instruct:free', name: 'Qwen: Qwen3 Next 80B A3B Instruct' }
   ];
+
+  let MODELS = [];
 
   function modelLabel(id) {
     const m = MODELS.find(x => x.id === id);
     return m ? m.label : id;
   }
 
-  function populateModelSelects() {
+  async function loadModels() {
+    try {
+      const res = await fetch('/api/models');
+      const data = await res.json();
+      if (!res.ok || !Array.isArray(data.models) || !data.models.length) throw new Error('no models');
+      MODELS = data.models.map(m => ({ id: m.id, label: `${m.name} (무료⚡)` }));
+    } catch (e) {
+      MODELS = FALLBACK_MODELS.map(m => ({ id: m.id, label: `${m.name} (무료⚡)` }));
+    }
+  }
+
+  async function populateModelSelects() {
+    await loadModels();
+
     const ai1 = document.getElementById('ai1Model');
     const ai2 = document.getElementById('ai2Model');
-    const optionsHtml = MODELS.map(m => `<option value="${m.id}">${m.label} (${m.tag})</option>`).join('');
+    const optionsHtml = MODELS.map(m => `<option value="${m.id}">${m.label}</option>`).join('');
     ai1.innerHTML = optionsHtml;
     ai2.innerHTML = optionsHtml;
 
     const saved = (() => {
       try { return JSON.parse(localStorage.getItem(MODEL_KEY) || 'null'); } catch { return null; }
     })();
-    ai1.value = saved?.ai1 || MODELS[0].id;
-    ai2.value = saved?.ai2 || MODELS[1].id;
+    ai1.value = (saved?.ai1 && MODELS.some(m => m.id === saved.ai1)) ? saved.ai1 : MODELS[0].id;
+    ai2.value = (saved?.ai2 && MODELS.some(m => m.id === saved.ai2)) ? saved.ai2 : (MODELS[1]?.id || MODELS[0].id);
 
     updateBadges();
     ai1.addEventListener('change', () => { saveModelChoice(); updateBadges(); });
     ai2.addEventListener('change', () => { saveModelChoice(); updateBadges(); });
+  }
+
+  function ensureModelOption(select, id, label) {
+    if (![...select.options].some(o => o.value === id)) {
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = label;
+      select.appendChild(opt);
+    }
+    select.value = id;
   }
 
   function saveModelChoice() {
@@ -315,14 +372,14 @@
     localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
   }
 
-  function addToHistory(topic, rounds, messages, ai1, ai2) {
+  function addToHistory(topic, rounds, messages, ai1, ai2, ai1Label, ai2Label) {
     const history = getHistory();
     const entry = {
       id: Date.now(),
       topic,
       rounds,
       messages,
-      ai1, ai2,
+      ai1, ai2, ai1Label, ai2Label,
       date: new Date().toISOString()
     };
     history.unshift(entry);
@@ -375,11 +432,26 @@
     if (!entry) return;
     currentDebateId = id;
     document.getElementById('debateArea').innerHTML = '';
+    document.getElementById('exportActions').style.display = 'none';
     document.getElementById('topic').value = entry.topic;
-    if (entry.ai1) document.getElementById('ai1Model').value = entry.ai1;
-    if (entry.ai2) document.getElementById('ai2Model').value = entry.ai2;
-    updateBadges();
+    const ai1Sel = document.getElementById('ai1Model');
+    const ai2Sel = document.getElementById('ai2Model');
+    if (entry.ai1) ensureModelOption(ai1Sel, entry.ai1, entry.ai1Label || modelLabel(entry.ai1));
+    if (entry.ai2) ensureModelOption(ai2Sel, entry.ai2, entry.ai2Label || modelLabel(entry.ai2));
+    if (entry.ai1Label) document.getElementById('ai1Badge').textContent = entry.ai1Label;
+    if (entry.ai2Label) document.getElementById('ai2Badge').textContent = entry.ai2Label;
+    if (!entry.ai1Label || !entry.ai2Label) updateBadges();
     entry.messages.forEach(m => addMsg(m.who, m.text, m.round, m.isVerdict, false));
+    if (entry.messages.some(m => m.isVerdict)) {
+      showExportActions({
+        topic: entry.topic,
+        rounds: entry.rounds,
+        ai1Label: entry.ai1Label || modelLabel(entry.ai1),
+        ai2Label: entry.ai2Label || modelLabel(entry.ai2),
+        date: entry.date,
+        messages: entry.messages
+      });
+    }
     renderHistory();
     if (window.innerWidth <= 700) {
       document.getElementById('sidebar').classList.remove('mobile-open');
@@ -444,6 +516,7 @@
 
     document.getElementById('startBtn').disabled = true;
     document.getElementById('debateArea').innerHTML = '';
+    document.getElementById('exportActions').style.display = 'none';
     debateMsgs = [];
     currentDebateId = null;
 
@@ -463,7 +536,7 @@
     let h1 = [], h2 = [], last1 = '', last2 = '';
 
     // Save to history at start
-    currentDebateId = addToHistory(topic, rounds, [], ai1Model, ai2Model);
+    currentDebateId = addToHistory(topic, rounds, [], ai1Model, ai2Model, ai1Label, ai2Label);
 
     try {
       for (let r = 1; r <= rounds; r++) {
@@ -515,11 +588,72 @@ ${h2.filter(m => m.role === 'assistant').map((m, i) => `Round ${i+1}: ${m.conten
       // Final history save
       updateHistoryEntry(currentDebateId, [...debateMsgs]);
 
+      showExportActions({ topic, rounds, ai1Label, ai2Label, date: new Date().toISOString(), messages: debateMsgs });
+
     } catch (e) {
       setStatus(`오류: ${e.message}`);
     }
 
     document.getElementById('startBtn').disabled = false;
+  }
+
+  // ─── Export ─────────────────────────────────────────────
+  let currentExport = null;
+
+  function showExportActions(data) {
+    currentExport = data;
+    document.getElementById('exportActions').style.display = 'flex';
+  }
+
+  function exportText() {
+    if (!currentExport) return;
+    const { topic, rounds, ai1Label, ai2Label, date, messages } = currentExport;
+    const dateStr = new Date(date).toLocaleString('ko-KR');
+    let out = `OpenRouter AI 토론 결과\n`;
+    out += `${'='.repeat(40)}\n`;
+    out += `주제: ${topic}\n`;
+    out += `일시: ${dateStr}\n`;
+    out += `AI1: ${ai1Label}\n`;
+    out += `AI2: ${ai2Label}\n`;
+    out += `라운드: ${rounds}R\n`;
+    out += `${'='.repeat(40)}\n\n`;
+
+    for (let r = 1; r <= rounds; r++) {
+      out += `[Round ${r}]\n\n`;
+      messages.filter(m => m.round === r).forEach(m => {
+        const label = m.who === 'AI1' ? ai1Label : m.who === 'AI2' ? ai2Label : m.who;
+        out += `${label}:\n${m.text}\n\n`;
+      });
+    }
+
+    const verdict = messages.find(m => m.isVerdict);
+    if (verdict) {
+      out += `${'='.repeat(40)}\n`;
+      out += `최종 합의\n`;
+      out += `${'='.repeat(40)}\n`;
+      out += `${verdict.text}\n`;
+    }
+
+    const blob = new Blob([out], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const safeTopic = topic.replace(/[\\/:*?"<>|]/g, '').slice(0, 40).trim() || 'debate';
+    const fileDate = new Date(date).toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `${safeTopic}_${fileDate}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function exportPDF() {
+    if (!currentExport) return;
+    const { topic, rounds, ai1Label, ai2Label, date } = currentExport;
+    document.getElementById('printTitle').textContent = topic;
+    document.getElementById('printMeta').textContent =
+      `${ai1Label} vs ${ai2Label} · ${rounds}R · ${new Date(date).toLocaleString('ko-KR')}`;
+    window.print();
   }
 
   // Init
