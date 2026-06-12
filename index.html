@@ -148,6 +148,8 @@
     .round-label { font-size: 11px; color: var(--text3); }
     .search-tag { font-size: 10px; padding: 2px 7px; border-radius: 4px; background: rgba(255,255,255,0.05); color: var(--text3); }
     .msg-body { font-size: 14px; line-height: 1.8; color: var(--text); white-space: pre-wrap; }
+    .msg-body a { color: #7dd3fc; text-decoration: underline; word-break: break-all; }
+    .msg-body a:hover { opacity: 0.8; }
 
     footer { text-align: center; font-size: 12px; color: var(--text3); padding: 1.5rem 0 0.5rem; }
 
@@ -463,6 +465,19 @@
 
   let debateMsgs = [];
 
+  // Escapes HTML, then turns markdown-style [label](url) links and bare URLs into <a> tags
+  function linkify(text) {
+    let out = escapeHtml(text);
+    out = out.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, (m, label, url) =>
+      `<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`);
+    out = out.replace(/(^|[\s(])(https?:\/\/[^\s<]+)/g, (m, pre, url) => {
+      const trailing = (url.match(/[)\].,]+$/) || [''])[0];
+      const cleanUrl = trailing ? url.slice(0, -trailing.length) : url;
+      return `${pre}<a href="${cleanUrl}" target="_blank" rel="noopener noreferrer">${cleanUrl}</a>${trailing}`;
+    });
+    return out;
+  }
+
   function addMsg(who, text, round, isVerdict, save = true) {
     const area = document.getElementById('debateArea');
     const div = document.createElement('div');
@@ -478,7 +493,7 @@
         ${round ? `<span class="round-label">Round ${round}</span>` : ''}
         ${searchTag}
       </div>
-      <div class="msg-body">${text}</div>`;
+      <div class="msg-body">${linkify(text)}</div>`;
     area.appendChild(div);
     div.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
@@ -633,7 +648,7 @@ ${h2.filter(m => m.role === 'assistant').map((m, i) => `Round ${i+1}: ${m.conten
       out += `[Round ${r}]\n\n`;
       messages.filter(m => m.round === r).forEach(m => {
         const label = m.who === 'AI1' ? ai1Label : m.who === 'AI2' ? ai2Label : m.who;
-        out += `${label}:\n${m.text}\n\n`;
+        out += `${label}:\n${plainTextLinks(m.text)}\n\n`;
       });
     }
 
@@ -642,7 +657,7 @@ ${h2.filter(m => m.role === 'assistant').map((m, i) => `Round ${i+1}: ${m.conten
       out += `${'='.repeat(40)}\n`;
       out += `최종 합의\n`;
       out += `${'='.repeat(40)}\n`;
-      out += `${verdict.text}\n`;
+      out += `${plainTextLinks(verdict.text)}\n`;
     }
 
     const blob = new Blob([out], { type: 'text/plain;charset=utf-8' });
@@ -660,6 +675,11 @@ ${h2.filter(m => m.role === 'assistant').map((m, i) => `Round ${i+1}: ${m.conten
     const safeTopic = topic.replace(/[\\/:*?"<>|]/g, '').slice(0, 40).trim() || 'debate';
     const fileDate = new Date(date).toISOString().slice(0, 10);
     return `${safeTopic}_${fileDate}.${ext}`;
+  }
+
+  // Converts markdown [label](url) links to "label (url)" so the URL stays readable as plain text
+  function plainTextLinks(text) {
+    return text.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, (m, label, url) => `${label} (${url})`);
   }
 
   function escapeHtml(str) {
@@ -711,6 +731,7 @@ ${h2.filter(m => m.role === 'assistant').map((m, i) => `Round ${i+1}: ${m.conten
         el.style.color = '#000';
         el.style.border = '1px solid #999';
       });
+      clone.querySelectorAll('a').forEach(el => { el.style.color = '#1a56db'; });
       container.appendChild(clone);
     });
 
@@ -730,6 +751,7 @@ ${h2.filter(m => m.role === 'assistant').map((m, i) => `Round ${i+1}: ${m.conten
       let pendingNewPage = false;
 
       for (const block of [...container.children]) {
+        const blockRect = block.getBoundingClientRect();
         const canvas = await html2canvas(block, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
         const ratio = contentWidth / canvas.width;
         const imgHeight = canvas.height * ratio;
@@ -747,6 +769,22 @@ ${h2.filter(m => m.role === 'assistant').map((m, i) => `Round ${i+1}: ${m.conten
             y = margin;
           }
           pdf.addImage(canvas.toDataURL('image/png'), 'PNG', margin, y, contentWidth, imgHeight);
+
+          // Overlay clickable link annotations on top of the rendered image
+          const ptPerCssPx = contentWidth / blockRect.width;
+          block.querySelectorAll('a[href]').forEach(a => {
+            [...a.getClientRects()].forEach(r => {
+              if (r.width <= 0 || r.height <= 0) return;
+              pdf.link(
+                margin + (r.left - blockRect.left) * ptPerCssPx,
+                y + (r.top - blockRect.top) * ptPerCssPx,
+                r.width * ptPerCssPx,
+                r.height * ptPerCssPx,
+                { url: a.href }
+              );
+            });
+          });
+
           y += imgHeight + gap;
         } else {
           // Block is taller than a page — slice it across full pages
