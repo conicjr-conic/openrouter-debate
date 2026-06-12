@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OpenRouter AI 토론</title>
+  <style>
+    :root {
+      --bg: #0f0f11; --surface: #18181c; --surface2: #222228;
+      --border: rgba(255,255,255,0.08); --border2: rgba(255,255,255,0.14);
+      --text: #f0f0f2; --text2: #9999aa; --text3: #44445a;
+      --ai1-color: #a78bfa; --ai1-bg: rgba(167,139,250,0.1);
+      --ai2-color: #34d399; --ai2-bg: rgba(52,211,153,0.1);
+      --verdict-color: #fbbf24; --verdict-bg: rgba(251,191,36,0.08);
+      --radius: 12px; --radius-sm: 8px;
+      --sidebar-w: 252px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 15px; line-height: 1.6; min-height: 100vh; }
+
+    /* Header */
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.25rem;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      background: var(--bg);
+      z-index: 50;
+    }
+    .sidebar-toggle {
+      width: 32px; height: 32px;
+      display: flex; align-items: center; justify-content: center;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--text2);
+      cursor: pointer;
+      font-size: 15px;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+    .sidebar-toggle:hover { background: var(--surface); color: var(--text); }
+    .logo { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; }
+    .logo-dot { width: 7px; height: 7px; border-radius: 50%; background: linear-gradient(135deg, var(--ai1-color), var(--ai2-color)); }
+    .logo-x { color: var(--text3); font-size: 13px; }
+    .model-badges { display: flex; gap: 6px; margin-left: 4px; }
+    .mbadge { font-size: 10px; padding: 2px 7px; border-radius: 20px; font-weight: 500; }
+    .mbadge-1 { background: var(--ai1-bg); color: var(--ai1-color); }
+    .mbadge-2 { background: var(--ai2-bg); color: var(--ai2-color); }
+    .header-right { margin-left: auto; font-size: 12px; color: var(--text3); }
+
+    /* Layout */
+    .app-layout { display: flex; min-height: calc(100vh - 56px); }
+
+    /* Sidebar */
+    .sidebar {
+      width: var(--sidebar-w);
+      min-width: var(--sidebar-w);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      background: var(--surface);
+      transition: transform 0.2s ease;
+      overflow: hidden;
+    }
+    .sidebar.hidden { display: none; }
+    .sidebar-head {
+      padding: 1rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .sidebar-head span { font-size: 12px; font-weight: 500; color: var(--text2); text-transform: uppercase; letter-spacing: 0.6px; }
+    .clear-btn { font-size: 11px; color: var(--text3); background: transparent; border: none; cursor: pointer; padding: 2px 4px; }
+    .clear-btn:hover { color: var(--text2); }
+    .history-list { flex: 1; overflow-y: auto; padding: 8px; }
+    .history-empty { padding: 2rem 1rem; text-align: center; font-size: 12px; color: var(--text3); line-height: 1.8; }
+    .history-item {
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      margin-bottom: 2px;
+      transition: background 0.1s;
+    }
+    .history-item:hover { background: var(--surface2); }
+    .history-item.active { background: var(--surface2); border-left: 2px solid var(--ai1-color); padding-left: 10px; }
+    .hi-topic { font-size: 13px; color: var(--text); line-height: 1.4; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .hi-meta { font-size: 11px; color: var(--text3); display: flex; gap: 6px; align-items: center; }
+    .hi-rounds { font-size: 10px; padding: 1px 5px; border-radius: 4px; background: rgba(255,255,255,0.05); }
+
+    /* Main area */
+    .main-wrapper { flex: 1; overflow-y: auto; }
+    .main-content { max-width: 760px; margin: 0 auto; padding: 1.75rem 1.5rem 4rem; }
+
+    /* Topic section */
+    .topic-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.1rem; margin-bottom: 1rem; }
+    .section-label { font-size: 11px; font-weight: 500; color: var(--text3); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 9px; }
+    .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    .preset { font-size: 12px; padding: 4px 10px; border-radius: 20px; border: 1px solid var(--border); background: transparent; color: var(--text2); cursor: pointer; transition: all 0.12s; white-space: nowrap; }
+    .preset:hover { border-color: var(--border2); color: var(--text); background: var(--surface2); }
+    textarea { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 14px; color: var(--text); resize: none; height: 76px; font-family: inherit; outline: none; transition: border-color 0.15s; }
+    textarea:focus { border-color: var(--border2); }
+    textarea::placeholder { color: var(--text3); }
+
+    /* Model selectors */
+    .model-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.1rem; margin-bottom: 1rem; }
+    .model-row { display: flex; gap: 12px; }
+    .model-col { flex: 1; }
+    .model-col-label { font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+    .model-col-label.c1 { color: var(--ai1-color); }
+    .model-col-label.c2 { color: var(--ai2-color); }
+    .model-col select { width: 100%; }
+
+    /* Controls */
+    .controls-row { display: flex; align-items: center; gap: 10px; margin-bottom: 1.25rem; flex-wrap: wrap; }
+    .ctrl-group { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text2); }
+    select { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 10px; font-size: 13px; color: var(--text); outline: none; cursor: pointer; }
+    .start-btn { margin-left: auto; background: var(--text); color: var(--bg); border: none; border-radius: var(--radius-sm); padding: 8px 18px; font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity 0.15s; }
+    .start-btn:hover:not(:disabled) { opacity: 0.85; }
+    .start-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    /* Status */
+    .status { text-align: center; font-size: 13px; color: var(--text2); padding: 4px 0 1rem; min-height: 28px; }
+    .dot-anim { animation: pulse 1.2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    /* Messages */
+    .debate-area { display: flex; flex-direction: column; gap: 14px; }
+    .msg { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.1rem 1.25rem; animation: fadeUp 0.3s ease; }
+    @keyframes fadeUp { from { opacity:0; transform: translateY(6px); } to { opacity:1; transform: translateY(0); } }
+    .msg.verdict { border-color: rgba(251,191,36,0.3); background: var(--verdict-bg); }
+    .msg-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .badge { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 20px; }
+    .badge-ai1 { background: var(--ai1-bg); color: var(--ai1-color); }
+    .badge-ai2 { background: var(--ai2-bg); color: var(--ai2-color); }
+    .badge-verdict { background: var(--verdict-bg); color: var(--verdict-color); border: 1px solid rgba(251,191,36,0.25); }
+    .round-label { font-size: 11px; color: var(--text3); }
+    .search-tag { font-size: 10px; padding: 2px 7px; border-radius: 4px; background: rgba(255,255,255,0.05); color: var(--text3); }
+    .msg-body { font-size: 14px; line-height: 1.8; color: var(--text); white-space: pre-wrap; }
+
+    footer { text-align: center; font-size: 12px; color: var(--text3); padding: 1.5rem 0 0.5rem; }
+
+    /* Overlay for mobile */
+    .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 40; }
+    .overlay.active { display: block; }
+
+    @media (max-width: 700px) {
+      .sidebar {
+        position: fixed;
+        left: 0;
+        top: 56px;
+        bottom: 0;
+        z-index: 45;
+        transform: translateX(-100%);
+        transition: transform 0.2s ease;
+      }
+      .sidebar.mobile-open { transform: translateX(0); }
+      .sidebar.hidden { display: flex; transform: translateX(-100%); }
+      .header-right { display: none; }
+      .model-badges { display: none; }
+      .model-row { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <button class="sidebar-toggle" onclick="toggleSidebar()" title="히스토리">☰</button>
+  <div class="logo">
+    <div class="logo-dot"></div>
+    <span>OpenRouter</span>
+    <span style="font-weight:400;color:var(--text2)">AI 토론</span>
+  </div>
+  <div class="model-badges">
+    <span class="mbadge mbadge-1" id="ai1Badge">AI1</span>
+    <span class="mbadge mbadge-2" id="ai2Badge">AI2</span>
+  </div>
+  <div class="header-right">웹 검색 기반 심층 토론</div>
+</header>
+
+<div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+
+<div class="app-layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-head">
+      <span>토론 히스토리</span>
+      <button class="clear-btn" onclick="clearHistory()">전체 삭제</button>
+    </div>
+    <div class="history-list" id="historyList">
+      <div class="history-empty">토론을 시작하면<br>여기에 기록됩니다</div>
+    </div>
+  </aside>
+
+  <div class="main-wrapper">
+    <div class="main-content">
+
+      <div class="model-section">
+        <div class="section-label">참가 모델</div>
+        <div class="model-row">
+          <div class="model-col">
+            <div class="model-col-label c1">AI 1</div>
+            <select id="ai1Model"></select>
+          </div>
+          <div class="model-col">
+            <div class="model-col-label c2">AI 2</div>
+            <select id="ai2Model"></select>
+          </div>
+        </div>
+      </div>
+
+      <div class="topic-section">
+        <div class="section-label">토론 주제</div>
+        <div class="presets">
+          <button class="preset" onclick="setTopic('지금 삼성전자 주식을 매수해야 할까?')">삼성전자 매수 타이밍</button>
+          <button class="preset" onclick="setTopic('AI가 인간의 일자리를 대체할 것인가?')">AI와 일자리</button>
+          <button class="preset" onclick="setTopic('서울 부동산은 앞으로 오를 것인가? 특히 마포구는?')">서울 부동산 전망</button>
+          <button class="preset" onclick="setTopic('전기차 vs 내연기관차, 어느 것이 더 유리한가?')">전기차 vs 내연기관</button>
+          <button class="preset" onclick="setTopic('스타트업 창업 vs 대기업 취업, 어느 쪽이 나은가?')">창업 vs 취업</button>
+          <button class="preset" onclick="setTopic('비트코인에 지금 투자해야 할까?')">비트코인 투자</button>
+        </div>
+        <textarea id="topic" placeholder="토론하고 싶은 주제를 입력하세요..."></textarea>
+      </div>
+
+      <div class="controls-row">
+        <div class="ctrl-group">
+          <span>라운드</span>
+          <select id="rounds">
+            <option value="1">1라운드</option>
+            <option value="2" selected>2라운드</option>
+            <option value="3">3라운드</option>
+          </select>
+        </div>
+        <button class="start-btn" id="startBtn" onclick="startDebate()">토론 시작 →</button>
+      </div>
+
+      <div class="status" id="status"></div>
+      <div class="debate-area" id="debateArea"></div>
+      <footer>OpenRouter · 웹 검색 기반 실시간 데이터</footer>
+    </div>
+  </div>
+</div>
+
+<script>
+  const HISTORY_KEY = 'openrouter_debate_history_v1';
+  const MODEL_KEY = 'openrouter_debate_models_v1';
+  let currentDebateId = null;
+
+  const MODELS = [
+    { id: 'meta-llama/llama-3.3-70b-instruct:free', label: 'Llama 3.3 70B', tag: '무료⚡' },
+    { id: 'deepseek/deepseek-r1:free', label: 'DeepSeek R1', tag: '무료⚡' },
+    { id: 'google/gemini-2.0-flash-exp:free', label: 'Gemini 2.0 Flash', tag: '무료⚡' },
+    { id: 'qwen/qwen3-235b-a22b:free', label: 'Qwen3 235B', tag: '무료⚡' },
+    { id: 'anthropic/claude-opus-4', label: 'Claude Opus 4', tag: '유료' },
+    { id: 'openai/gpt-4o', label: 'GPT-4o', tag: '유료' }
+  ];
+
+  function modelLabel(id) {
+    const m = MODELS.find(x => x.id === id);
+    return m ? m.label : id;
+  }
+
+  function populateModelSelects() {
+    const ai1 = document.getElementById('ai1Model');
+    const ai2 = document.getElementById('ai2Model');
+    const optionsHtml = MODELS.map(m => `<option value="${m.id}">${m.label} (${m.tag})</option>`).join('');
+    ai1.innerHTML = optionsHtml;
+    ai2.innerHTML = optionsHtml;
+
+    const saved = (() => {
+      try { return JSON.parse(localStorage.getItem(MODEL_KEY) || 'null'); } catch { return null; }
+    })();
+    ai1.value = saved?.ai1 || MODELS[0].id;
+    ai2.value = saved?.ai2 || MODELS[1].id;
+
+    updateBadges();
+    ai1.addEventListener('change', () => { saveModelChoice(); updateBadges(); });
+    ai2.addEventListener('change', () => { saveModelChoice(); updateBadges(); });
+  }
+
+  function saveModelChoice() {
+    localStorage.setItem(MODEL_KEY, JSON.stringify({
+      ai1: document.getElementById('ai1Model').value,
+      ai2: document.getElementById('ai2Model').value
+    }));
+  }
+
+  function updateBadges() {
+    document.getElementById('ai1Badge').textContent = modelLabel(document.getElementById('ai1Model').value);
+    document.getElementById('ai2Badge').textContent = modelLabel(document.getElementById('ai2Model').value);
+  }
+
+  // ─── Sidebar ────────────────────────────────────────────
+  function toggleSidebar() {
+    const sb = document.getElementById('sidebar');
+    const ov = document.getElementById('overlay');
+    if (window.innerWidth <= 700) {
+      sb.classList.toggle('mobile-open');
+      ov.classList.toggle('active');
+    } else {
+      sb.classList.toggle('hidden');
+    }
+  }
+
+  // ─── History ────────────────────────────────────────────
+  function getHistory() {
+    try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; }
+  }
+
+  function saveHistory(history) {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  }
+
+  function addToHistory(topic, rounds, messages, ai1, ai2) {
+    const history = getHistory();
+    const entry = {
+      id: Date.now(),
+      topic,
+      rounds,
+      messages,
+      ai1, ai2,
+      date: new Date().toISOString()
+    };
+    history.unshift(entry);
+    if (history.length > 30) history.pop();
+    saveHistory(history);
+    renderHistory();
+    return entry.id;
+  }
+
+  function updateHistoryEntry(id, messages) {
+    const history = getHistory();
+    const idx = history.findIndex(e => e.id === id);
+    if (idx !== -1) {
+      history[idx].messages = messages;
+      saveHistory(history);
+    }
+  }
+
+  function clearHistory() {
+    if (!confirm('토론 히스토리를 모두 삭제할까요?')) return;
+    localStorage.removeItem(HISTORY_KEY);
+    renderHistory();
+    document.getElementById('debateArea').innerHTML = '';
+  }
+
+  function renderHistory() {
+    const list = document.getElementById('historyList');
+    const history = getHistory();
+    if (!history.length) {
+      list.innerHTML = '<div class="history-empty">토론을 시작하면<br>여기에 기록됩니다</div>';
+      return;
+    }
+    list.innerHTML = history.map(e => {
+      const date = new Date(e.date);
+      const dateStr = `${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2,'0')}`;
+      const isActive = e.id === currentDebateId;
+      return `<div class="history-item${isActive ? ' active' : ''}" onclick="loadDebate(${e.id})">
+        <div class="hi-topic">${e.topic}</div>
+        <div class="hi-meta">
+          <span>${dateStr}</span>
+          <span class="hi-rounds">${e.rounds}R</span>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  function loadDebate(id) {
+    const history = getHistory();
+    const entry = history.find(e => e.id === id);
+    if (!entry) return;
+    currentDebateId = id;
+    document.getElementById('debateArea').innerHTML = '';
+    document.getElementById('topic').value = entry.topic;
+    if (entry.ai1) document.getElementById('ai1Model').value = entry.ai1;
+    if (entry.ai2) document.getElementById('ai2Model').value = entry.ai2;
+    updateBadges();
+    entry.messages.forEach(m => addMsg(m.who, m.text, m.round, m.isVerdict, false));
+    renderHistory();
+    if (window.innerWidth <= 700) {
+      document.getElementById('sidebar').classList.remove('mobile-open');
+      document.getElementById('overlay').classList.remove('active');
+    }
+    setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 100);
+  }
+
+  // ─── UI Helpers ─────────────────────────────────────────
+  function setTopic(t) { document.getElementById('topic').value = t; }
+
+  function setStatus(msg) {
+    document.getElementById('status').innerHTML = msg
+      ? `<span class="dot-anim">●</span> ${msg}` : '';
+  }
+
+  let debateMsgs = [];
+
+  function addMsg(who, text, round, isVerdict, save = true) {
+    const area = document.getElementById('debateArea');
+    const div = document.createElement('div');
+    div.className = 'msg' + (isVerdict ? ' verdict' : '');
+    const badgeClass = who === 'AI1' ? 'badge-ai1' : who === 'AI2' ? 'badge-ai2' : 'badge-verdict';
+    const badgeLabel = who === 'AI1' ? document.getElementById('ai1Badge').textContent
+      : who === 'AI2' ? document.getElementById('ai2Badge').textContent
+      : who;
+    const searchTag = (who === 'AI1' || who === 'AI2') ? '<span class="search-tag">🔍 웹검색</span>' : '';
+    div.innerHTML = `
+      <div class="msg-header">
+        <span class="badge ${badgeClass}">${badgeLabel}</span>
+        ${round ? `<span class="round-label">Round ${round}</span>` : ''}
+        ${searchTag}
+      </div>
+      <div class="msg-body">${text}</div>`;
+    area.appendChild(div);
+    div.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    if (save) {
+      debateMsgs.push({ who, text, round, isVerdict });
+    }
+  }
+
+  // ─── API Calls ──────────────────────────────────────────
+  async function callModel(model, messages, system) {
+    const res = await fetch('/api/debate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, messages, system })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error?.message || data.error || `오류: ${res.status}`);
+    return data.text;
+  }
+
+  // ─── Main Debate ─────────────────────────────────────────
+  async function startDebate() {
+    const topic = document.getElementById('topic').value.trim();
+    const rounds = parseInt(document.getElementById('rounds').value);
+    const ai1Model = document.getElementById('ai1Model').value;
+    const ai2Model = document.getElementById('ai2Model').value;
+    if (!topic) return alert('토론 주제를 입력하세요.');
+
+    document.getElementById('startBtn').disabled = true;
+    document.getElementById('debateArea').innerHTML = '';
+    debateMsgs = [];
+    currentDebateId = null;
+
+    const ai1Label = modelLabel(ai1Model);
+    const ai2Label = modelLabel(ai2Model);
+
+    const makeSys = (selfLabel, opponentLabel) => `당신은 세계 최고 수준의 리서처이자 토론 전문가입니다.
+반드시 웹 검색을 통해 최신 통계, 데이터, 정책, 사례 연구를 확인한 후 답변하세요.
+답변 시 구체적인 수치(%, 금액, 연도), 정책명, 기관명, 연구 출처를 반드시 인용하세요.
+단순한 일반론이 아닌, 검색을 통해 확인된 최신 사실에 기반한 설득력 있는 논거를 7-9문장으로 제시하세요.
+상대방 AI(${opponentLabel})의 의견을 분석하되, 새로운 데이터와 관점으로 논거를 강화하거나 반박하세요.
+당신은 ${selfLabel}입니다. 반드시 한국어로 답변하세요.`;
+
+    const ai1Sys = makeSys(ai1Label, ai2Label);
+    const ai2Sys = makeSys(ai2Label, ai1Label);
+
+    let h1 = [], h2 = [], last1 = '', last2 = '';
+
+    // Save to history at start
+    currentDebateId = addToHistory(topic, rounds, [], ai1Model, ai2Model);
+
+    try {
+      for (let r = 1; r <= rounds; r++) {
+        // AI1
+        setStatus(`Round ${r} — ${ai1Label} 검색 및 분석 중...`);
+        const p1 = r === 1
+          ? `토론 주제: "${topic}"\n\n이 주제에 대해 최신 데이터를 검색하고 첫 번째 의견을 제시하세요.`
+          : `토론 주제: "${topic}"\n\n${ai2Label}의 Round ${r-1} 주장:\n"${last2}"\n\n위 주장에 대해 최신 데이터를 검색하여 반박하거나 보완하는 Round ${r} 의견을 제시하세요.`;
+        h1.push({ role: 'user', content: p1 });
+        last1 = await callModel(ai1Model, h1, ai1Sys);
+        h1.push({ role: 'assistant', content: last1 });
+        addMsg('AI1', last1, r);
+
+        // AI2
+        setStatus(`Round ${r} — ${ai2Label} 검색 및 분석 중...`);
+        const p2 = r === 1
+          ? `토론 주제: "${topic}"\n\n${ai1Label}의 첫 번째 주장:\n"${last1}"\n\n${ai1Label}의 주장을 분석하고, 최신 데이터를 검색하여 당신의 첫 번째 의견을 제시하세요.`
+          : `토론 주제: "${topic}"\n\n${ai1Label}의 Round ${r} 주장:\n"${last1}"\n\n위 주장에 대해 최신 데이터를 검색하여 반박하거나 보완하는 Round ${r} 의견을 제시하세요.`;
+        h2.push({ role: 'user', content: p2 });
+        last2 = await callModel(ai2Model, h2, ai2Sys);
+        h2.push({ role: 'assistant', content: last2 });
+        addMsg('AI2', last2, r);
+
+        // Update history after each round
+        updateHistoryEntry(currentDebateId, [...debateMsgs]);
+      }
+
+      // Final verdict
+      setStatus('최종 합의 도출 중...');
+      const verdictPrompt = `토론 주제: "${topic}"
+
+=== ${ai1Label}의 주장 ===
+${h1.filter(m => m.role === 'assistant').map((m, i) => `Round ${i+1}: ${m.content}`).join('\n\n')}
+
+=== ${ai2Label}의 주장 ===
+${h2.filter(m => m.role === 'assistant').map((m, i) => `Round ${i+1}: ${m.content}`).join('\n\n')}
+
+위 두 AI의 토론을 종합하여:
+1. 양측이 동의하는 핵심 포인트
+2. 여전히 불일치하는 부분
+3. 데이터와 근거에 기반한 최종 합리적 결론 및 실행 가능한 제안
+을 구체적인 수치와 함께 8-10문장으로 제시하세요.`;
+
+      h1.push({ role: 'user', content: verdictPrompt });
+      const verdict = await callModel(ai1Model, h1, '당신은 공정한 중재자입니다. 두 AI의 토론을 종합하여 데이터 기반의 균형 잡힌 최종 결론을 한국어로 제시하세요.');
+      addMsg('최종 합의', verdict, null, true);
+      setStatus('');
+
+      // Final history save
+      updateHistoryEntry(currentDebateId, [...debateMsgs]);
+
+    } catch (e) {
+      setStatus(`오류: ${e.message}`);
+    }
+
+    document.getElementById('startBtn').disabled = false;
+  }
+
+  // Init
+  populateModelSelects();
+  renderHistory();
+</script>
+</body>
+</html>
