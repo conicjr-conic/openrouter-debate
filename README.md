@@ -15,17 +15,20 @@ OpenRouter API를 통해 서로 다른 LLM 두 개를 골라 특정 주제에 �
 | 모델 | ID | 비용 |
 | --- | --- | --- |
 | Llama 3.3 70B | `meta-llama/llama-3.3-70b-instruct:free` | 무료⚡ |
-| DeepSeek R1 | `deepseek/deepseek-r1:free` | 무료⚡ |
-| Gemini 2.0 Flash | `google/gemini-2.0-flash-exp:free` | 무료⚡ |
-| Qwen3 235B | `qwen/qwen3-235b-a22b:free` | 무료⚡ |
+| GPT-OSS 120B | `openai/gpt-oss-120b:free` | 무료⚡ |
+| Gemma 4 31B | `google/gemma-4-31b-it:free` | 무료⚡ |
+| Qwen3 Next 80B | `qwen/qwen3-next-80b-a3b-instruct:free` | 무료⚡ |
 | Claude Opus 4 | `anthropic/claude-opus-4` | 유료 |
 | GPT-4o | `openai/gpt-4o` | 유료 |
+
+> 참고: 처음 요청했던 `deepseek-r1:free`, `gemini-2.0-flash-exp:free`, `qwen3-235b-a22b:free`는 현재 OpenRouter에서 제공되지 않아(deprecated) 위 목록으로 대체했습니다.
+> 모델 목록은 [openrouter.ai/api/v1/models](https://openrouter.ai/api/v1/models)에서 무료(`:free`) 모델을 확인 후 [index.html](index.html)의 `MODELS` 배열을 수정하면 됩니다.
 
 > ⚠️ 무료(`:free`) 모델이라도 OpenRouter의 `web` 검색 플러그인을 사용하면 검색 결과 수에 따라 별도 비용이 부과될 수 있습니다. 자세한 내용은 [OpenRouter 웹 검색 가격 정책](https://openrouter.ai/docs)을 참고하세요.
 
 ## 구조
 
-```
+```text
 openrouter-debate/
 ├── api/
 │   └── debate.js   # OpenRouter chat completions 호출 (model, messages, system을 body로 받음)
@@ -40,7 +43,7 @@ Vercel 프로젝트 설정 → Environment Variables 에 아래 값을 등록하
 
 | 변수명 | 설명 |
 | --- | --- |
-| `OPENROUTER_API_KEY` | https://openrouter.ai/keys 에서 발급한 API 키 |
+| `OPENROUTER_API_KEY` | [openrouter.ai/keys](https://openrouter.ai/keys) 에서 발급한 API 키 |
 
 ## 로컬에서 실행하기
 
